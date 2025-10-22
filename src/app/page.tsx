@@ -9,6 +9,9 @@ const Home = () => {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { handleLogout } = useLogout();
 
+  console.log(isAuthenticated ? "로그인" : "로그아웃");
+  console.log("user", user);
+
   return (
     <div className="flex flex-col min-h-screen items-center justify-center w-full bg-gray-50">
       <LoginSection
@@ -25,7 +28,13 @@ const Home = () => {
         </div>
       ) : (
         <div>
-          <button onClick={handleLogout}>로그아웃</button>
+          <button
+            onClick={() => {
+              handleLogout();
+            }}
+          >
+            로그아웃
+          </button>
         </div>
       )}
 
