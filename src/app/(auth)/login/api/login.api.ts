@@ -13,6 +13,12 @@ export const login = async (
     });
 
     const data = await response.json();
+
+    if (!response.ok) {
+      // 401, 400, 500 등 에러 상태
+      throw new Error(data.error || "Login failed");
+    }
+
     return data;
   } catch (error) {
     throw error;
