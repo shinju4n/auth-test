@@ -6,6 +6,11 @@ import Link from "next/link";
 
 const Home = () => {
   const { isAuthenticated, isLoading, user } = useAuth();
+
+  console.log("user", user);
+  console.log("isAuthenticated", isAuthenticated);
+  console.log("isLoading", isLoading);
+
   return (
     <div className="flex flex-col min-h-screen items-center justify-center w-full bg-gray-50">
       <LoginSection
