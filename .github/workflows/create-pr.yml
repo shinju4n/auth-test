@@ -1,0 +1,87 @@
+# dev 브랜치에 push되면 자동으로 PR 생성
+name: create-pr
+
+on:
+  push:
+    branches: [dev]
+
+env:
+  TARGET_BRANCH: main # PR 생성할 대상 브랜치 (변경 가능)
+
+jobs:
+  create-pull-request:
+    runs-on: ubuntu-latest
+    steps:
+      # 코드 체크아웃
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 이미 열린 PR이 있는지 확인
+      - name: Check for existing PR
+        id: check-pr
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          existing_pr=$(gh pr list --head dev --base ${{ env.TARGET_BRANCH }} --json number --jq '.[0].number')
+          if [ -n "$existing_pr" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "PR already exists: #$existing_pr"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No existing PR found"
+          fi
+
+      # Gemini CLI 설치 (PR이 없을 때만)
+      - name: Install Gemini CLI
+        if: steps.check-pr.outputs.exists == 'false'
+        run: |
+          npm install -g @google/gemini-cli
+
+      # Gemini로 PR 제목과 설명 생성 (PR이 없을 때만)
+      - name: Generate PR Title and Description
+        if: steps.check-pr.outputs.exists == 'false'
+        id: generate-pr
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_OUTPUT: ${{ github.output }}
+        run: |
+          # main과 dev 브랜치 차이만 분석
+          bash .github/scripts/generate-pr-description.sh \
+            ${{ env.TARGET_BRANCH }} \
+            dev
+
+      # 기존 PR이 없을 때만 새로 생성
+      - name: Create Pull Request
+        if: steps.check-pr.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+          TZ: Asia/Seoul
+          PR_BODY: ${{ steps.generate-pr.outputs.body }}
+        run: |
+          # 현재 시간 생성 (KST)
+          CURRENT_TIME=$(TZ=Asia/Seoul date +'%Y-%m-%d %H:%M:%S KST')
+
+          # PR body를 환경변수로부터 파일에 저장 (backtick 보존)
+          echo "$PR_BODY" > pr_body.md
+
+          # AI-MANAGED 섹션 추가 (update-pr.yml이 이 영역을 업데이트)
+          cat >> pr_body.md << EOF
+
+          <!-- AI-MANAGED-START -->
+          <!-- 이 섹션은 AI가 자동으로 관리합니다. PR 업데이트 시 새 변경사항이 여기에 추가됩니다. -->
+          <!-- AI-MANAGED-END -->
+
+          ---
+          _🤖 AI로 자동 생성된 PR (제목 + 설명)_
+          _생성 시간: ${CURRENT_TIME}_
+          _커밋 SHA: ${{ github.sha }}_
+          EOF
+
+          # 파일에서 읽어서 PR 생성
+          gh pr create \
+            --base ${{ env.TARGET_BRANCH }} \
+            --head dev \
+            --title "${{ steps.generate-pr.outputs.title }}" \
+            --body-file pr_body.md

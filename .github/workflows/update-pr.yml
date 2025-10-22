@@ -1,0 +1,122 @@
+# PR에 새 커밋이 추가되면 자동으로 본문 업데이트
+name: update-pr
+
+on:
+  pull_request:
+    types: [synchronize] # PR에 새 커밋 push될 때
+    branches: [main]
+
+env:
+  TARGET_BRANCH: main
+
+jobs:
+  update-pull-request:
+    runs-on: ubuntu-latest
+    # dev 브랜치에서 main으로 가는 PR만 처리
+    if: github.event.pull_request.head.ref == 'dev'
+
+    steps:
+      # 코드 체크아웃
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 현재 PR 정보 가져오기
+      - name: Get current PR info
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PR_BODY=$(gh pr view $PR_NUMBER --json body --jq '.body')
+
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$PR_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Gemini CLI 설치
+      - name: Install Gemini CLI
+        run: |
+          npm install -g @google/gemini-cli
+
+      # 새로운 커밋만 분석 (이전 커밋 ~ 최신 커밋)
+      - name: Analyze new commits
+        id: analyze
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_OUTPUT: ${{ github.output }}
+        run: |
+          # before: PR 업데이트 전 마지막 커밋
+          # after: PR 업데이트 후 최신 커밋
+          bash .github/scripts/analyze-pr-updates.sh \
+            ${{ github.event.before }} \
+            ${{ github.event.after }}
+
+      # PR 본문의 AI-MANAGED 섹션 업데이트
+      - name: Update PR body
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+          TZ: Asia/Seoul
+          PR_BODY: ${{ steps.pr-info.outputs.body }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.number }}
+          NEW_CHANGES: ${{ steps.analyze.outputs.changes }}
+        run: |
+          CURRENT_TIME=$(TZ=Asia/Seoul date +'%Y-%m-%d %H:%M:%S KST')
+
+          # AI-MANAGED 섹션에 새 변경사항 추가
+          # 기존 본문에서 AI-MANAGED-START ~ AI-MANAGED-END 영역 찾기
+          if echo "$PR_BODY" | grep -q "<!-- AI-MANAGED-START -->"; then
+            # AI-MANAGED 섹션이 있으면 해당 영역에 추가
+            echo "$PR_BODY" > updated_body.md
+
+            # AI-MANAGED-END 바로 앞에 새 업데이트 삽입
+            # 임시 파일 생성
+            {
+              echo ""
+              echo "---"
+              echo "## 🔄 Update ($CURRENT_TIME)"
+              echo "$NEW_CHANGES"
+              echo ""
+            } > update_section.txt
+
+            # sed로 AI-MANAGED-END 앞에 삽입
+            awk '/<!-- AI-MANAGED-END -->/ {
+              while ((getline line < "update_section.txt") > 0) {
+                print line
+              }
+              close("update_section.txt")
+            }
+            {print}' updated_body.md > temp_body.md
+
+            mv temp_body.md updated_body.md
+            rm -f update_section.txt
+
+          else
+            # AI-MANAGED 섹션이 없으면 본문 끝에 추가
+            {
+              echo "$PR_BODY"
+              echo ""
+              echo "<!-- AI-MANAGED-START -->"
+              echo "---"
+              echo "## 🔄 Update ($CURRENT_TIME)"
+              echo "$NEW_CHANGES"
+              echo "<!-- AI-MANAGED-END -->"
+              echo ""
+              echo "---"
+              echo "_🤖 AI가 자동으로 업데이트한 내용입니다._"
+            } > updated_body.md
+          fi
+
+          # PR 본문 업데이트
+          gh pr edit $PR_NUMBER --body-file updated_body.md
+
+      # 업데이트 완료 확인
+      - name: Verify update
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          echo "✅ PR #${{ steps.pr-info.outputs.number }} 업데이트 완료"
+          echo "📝 새 커밋: ${{ github.event.after }}"
+          echo "🕐 업데이트 시간: $(TZ=Asia/Seoul date +'%Y-%m-%d %H:%M:%S KST')"

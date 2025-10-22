@@ -1,0 +1,168 @@
+# PR 생성/업데이트 시 AI가 코드 리뷰 코멘트 작성
+name: pr-review
+
+on:
+  pull_request:
+    types: [opened, synchronize]  # PR 생성 + 새 커밋 추가
+    branches: [main]
+
+env:
+  TARGET_BRANCH: main
+
+jobs:
+  ai-code-review:
+    runs-on: ubuntu-latest
+    # dev → main PR만 처리
+    if: github.event.pull_request.head.ref == 'dev'
+
+    steps:
+      # 코드 체크아웃
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # PR 정보 가져오기
+      - name: Get PR info
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+
+          # opened 이벤트: 전체 PR diff
+          # synchronize 이벤트: 새 커밋만
+          if [ "${{ github.event.action }}" = "opened" ]; then
+            BEFORE_SHA="${{ github.event.pull_request.base.sha }}"
+            AFTER_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BEFORE_SHA="${{ github.event.before }}"
+            AFTER_SHA="${{ github.event.after }}"
+          fi
+
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "before=$BEFORE_SHA" >> $GITHUB_OUTPUT
+          echo "after=$AFTER_SHA" >> $GITHUB_OUTPUT
+
+      # Gemini CLI 설치
+      - name: Install Gemini CLI
+        run: |
+          npm install -g @google/gemini-cli
+
+      # AI 코드 리뷰 분석
+      - name: Analyze code changes
+        id: analyze
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_OUTPUT: ${{ github.output }}
+        run: |
+          bash .github/scripts/analyze-code-review.sh \
+            ${{ steps.pr-info.outputs.before }} \
+            ${{ steps.pr-info.outputs.after }}
+
+      # 기존 리뷰 코멘트 확인 (중복 방지)
+      - name: Get existing review comments
+        id: existing-comments
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr-info.outputs.number }}
+
+          # PR의 기존 리뷰 코멘트 가져오기 (AI가 작성한 것만)
+          gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
+            --jq '[.[] | select(.body | startswith("🤖")) | {path: .path, line: .line, body: .body}]' \
+            > existing_comments.json
+
+          echo "AI 코멘트 개수: $(cat existing_comments.json | jq 'length')"
+
+      # 인라인 리뷰 코멘트 작성
+      - name: Post review comments
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr-info.outputs.number }}
+          COMMIT_SHA=${{ steps.pr-info.outputs.after }}
+
+          # analyze-code-review.sh가 생성한 리뷰 결과 파일 읽기
+          if [ ! -f "review_comments.json" ]; then
+            echo "리뷰 코멘트 없음"
+            exit 0
+          fi
+
+          # JSON 배열 형태: [{path, line, body, severity}, ...]
+          COMMENTS=$(cat review_comments.json)
+          COMMENT_COUNT=$(echo "$COMMENTS" | jq 'length')
+
+          echo "작성할 코멘트 개수: $COMMENT_COUNT"
+
+          if [ "$COMMENT_COUNT" -eq 0 ]; then
+            echo "✅ 리뷰할 이슈 없음"
+            exit 0
+          fi
+
+          # 각 코멘트 작성
+          echo "$COMMENTS" | jq -c '.[]' | while read -r comment; do
+            FILE_PATH=$(echo "$comment" | jq -r '.path')
+            LINE=$(echo "$comment" | jq -r '.line')
+            BODY=$(echo "$comment" | jq -r '.body')
+            SEVERITY=$(echo "$comment" | jq -r '.severity')
+
+            # 중복 확인: 같은 파일, 같은 라인에 이미 코멘트가 있는지
+            EXISTING=$(cat existing_comments.json | jq -r --arg path "$FILE_PATH" --arg line "$LINE" \
+              '.[] | select(.path == $path and (.line | tostring) == $line) | .body')
+
+            if [ -n "$EXISTING" ]; then
+              echo "⏭️  중복 코멘트 스킵: $FILE_PATH:$LINE"
+              continue
+            fi
+
+            # Critical, High만 코멘트 작성
+            if [ "$SEVERITY" != "critical" ] && [ "$SEVERITY" != "high" ]; then
+              echo "⏭️  낮은 심각도 스킵: $FILE_PATH:$LINE ($SEVERITY)"
+              continue
+            fi
+
+            echo "💬 코멘트 작성: $FILE_PATH:$LINE [$SEVERITY]"
+
+            # 인라인 리뷰 코멘트 작성
+            gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
+              -X POST \
+              -f body="$BODY" \
+              -f commit_id="$COMMIT_SHA" \
+              -f path="$FILE_PATH" \
+              -F line=$LINE \
+              -f side="RIGHT" || echo "⚠️  코멘트 작성 실패 (파일이 diff에 없을 수 있음)"
+          done
+
+          echo "✅ AI 코드 리뷰 완료"
+
+      # 리뷰 완료 요약 코멘트 (선택)
+      - name: Post review summary
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr-info.outputs.number }}
+
+          if [ -f "review_comments.json" ]; then
+            TOTAL=$(cat review_comments.json | jq 'length')
+            CRITICAL=$(cat review_comments.json | jq '[.[] | select(.severity == "critical")] | length')
+            HIGH=$(cat review_comments.json | jq '[.[] | select(.severity == "high")] | length')
+            AFTER_SHA="${{ steps.pr-info.outputs.after }}"
+
+            # heredoc 대신 echo 블록 사용
+            {
+              echo "## 🤖 AI 코드 리뷰 완료"
+              echo ""
+              echo "**분석 결과**:"
+              echo "- 🔴 Critical: ${CRITICAL}개"
+              echo "- 🟠 High: ${HIGH}개"
+              echo "- 📊 전체 이슈: ${TOTAL}개"
+              echo ""
+              echo "_리뷰 초점: 성능, 보안, SOLID/DRY/YAGNI/KISS 원칙_"
+              echo "_새 커밋: \`${AFTER_SHA}\`_"
+            } > summary.md
+
+            gh pr comment $PR_NUMBER --body-file summary.md
+            rm -f summary.md
+          fi

@@ -1,0 +1,141 @@
+# AI가 PR 코멘트 질문에 답변
+name: ai-reply
+
+on:
+  # PR 코드 리뷰 인라인 코멘트만 지원
+  pull_request_review_comment:
+    types: [created]
+
+env:
+  TARGET_BRANCH: main
+
+jobs:
+  ai-reply:
+    runs-on: ubuntu-latest
+    # @ai로 시작하는 review comment만 처리
+    if: startsWith(github.event.comment.body, '@ai')
+
+    steps:
+      # 코드 체크아웃
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # PR 정보 가져오기
+      - name: Get PR info
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          COMMENT_ID=${{ github.event.comment.id }}
+
+          # PR의 head SHA 가져오기
+          PR_DATA=$(gh api repos/${{ github.repository }}/pulls/$PR_NUMBER)
+          HEAD_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
+
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "comment_id=$COMMENT_ID" >> $GITHUB_OUTPUT
+          echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+
+      # 코멘트가 AI 리뷰 코멘트에 대한 답글인지 확인
+      - name: Check if reply to AI comment
+        id: check-reply
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr-info.outputs.number }}
+          COMMENT_ID=${{ steps.pr-info.outputs.comment_id }}
+
+          # 현재 코멘트 정보 가져오기
+          COMMENT_DATA=$(gh api repos/${{ github.repository }}/pulls/comments/$COMMENT_ID)
+
+          # in_reply_to_id가 있는지 확인
+          IN_REPLY_TO=$(echo "$COMMENT_DATA" | jq -r '.in_reply_to_id // empty')
+
+          if [ -z "$IN_REPLY_TO" ]; then
+            # 직접 답글이 아니면, 같은 라인의 AI 코멘트 찾기
+            PATH_FILE=$(echo "$COMMENT_DATA" | jq -r '.path')
+            LINE_NUM=$(echo "$COMMENT_DATA" | jq -r '.line // .original_line')
+
+            # 같은 파일, 같은 라인의 AI 코멘트 찾기
+            PARENT_COMMENT=$(gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
+              --jq ".[] | select(.path == \"$PATH_FILE\" and (.line == $LINE_NUM or .original_line == $LINE_NUM) and (.body | startswith(\"🤖\"))) | .id" \
+              | head -1)
+
+            if [ -n "$PARENT_COMMENT" ]; then
+              IN_REPLY_TO=$PARENT_COMMENT
+            fi
+          fi
+
+          if [ -z "$IN_REPLY_TO" ]; then
+            echo "❌ AI 코멘트에 대한 답글이 아닙니다"
+            echo "is_reply=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 원본 AI 코멘트 내용 가져오기
+          PARENT_DATA=$(gh api repos/${{ github.repository }}/pulls/comments/$IN_REPLY_TO)
+          PARENT_BODY=$(echo "$PARENT_DATA" | jq -r '.body')
+
+          # AI가 작성한 코멘트인지 확인
+          if [[ ! "$PARENT_BODY" =~ ^🤖 ]]; then
+            echo "❌ AI가 작성한 코멘트가 아닙니다"
+            echo "is_reply=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "is_reply=true" >> $GITHUB_OUTPUT
+          echo "parent_comment_id=$IN_REPLY_TO" >> $GITHUB_OUTPUT
+
+          # 파일 경로와 라인 번호 저장
+          PATH_FILE=$(echo "$PARENT_DATA" | jq -r '.path')
+          LINE_NUM=$(echo "$PARENT_DATA" | jq -r '.line // .original_line')
+
+          echo "file_path=$PATH_FILE" >> $GITHUB_OUTPUT
+          echo "line_number=$LINE_NUM" >> $GITHUB_OUTPUT
+
+          # 원본 코멘트 내용 저장
+          echo "$PARENT_BODY" > /tmp/parent_comment.txt
+
+      # AI 답변 생성 (Gemini API 직접 호출)
+      - name: Generate AI reply
+        if: steps.check-reply.outputs.is_reply == 'true'
+        id: generate-reply
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          bash .github/scripts/ai-reply-direct.sh \
+            "${{ steps.pr-info.outputs.head_sha }}" \
+            "${{ steps.check-reply.outputs.file_path }}" \
+            "${{ steps.check-reply.outputs.line_number }}" \
+            "${{ github.event.comment.body }}"
+
+      # 답변 코멘트 작성
+      - name: Post AI reply
+        if: steps.check-reply.outputs.is_reply == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr-info.outputs.number }}
+          PARENT_ID=${{ steps.check-reply.outputs.parent_comment_id }}
+
+          if [ ! -f "ai_reply.txt" ]; then
+            echo "❌ AI 답변 파일 없음"
+            exit 1
+          fi
+
+          REPLY_BODY=$(cat ai_reply.txt)
+
+          # 답글 작성
+          gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
+            -X POST \
+            -f body="$REPLY_BODY" \
+            -f commit_id="${{ steps.pr-info.outputs.head_sha }}" \
+            -f path="${{ steps.check-reply.outputs.file_path }}" \
+            -F line=${{ steps.check-reply.outputs.line_number }} \
+            -f side="RIGHT" \
+            -F in_reply_to=$PARENT_ID
+
+          echo "✅ AI 답변 작성 완료"
