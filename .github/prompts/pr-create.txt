@@ -1,22 +1,24 @@
-다음 코드 변경사항을 분석해서 Pull Request 제목과 설명을 작성해줘.
+Analyze the following code changes and write a Pull Request title and description.
 
-**중요: 반드시 아래 형식을 정확히 따라야 함**
+**Important: You must follow the format below exactly**
 
-첫 줄: TITLE: [PR 제목을 한 줄로]
-둘째 줄: --- (구분선)
-셋째 줄부터: 마크다운 형식의 상세 설명
+First line: TITLE: [PR title in one line]
+Second line: --- (separator)
+From third line onwards: Detailed description in markdown format
 
-제목 작성 규칙:
+Title Writing Rules:
 - {LANGUAGE_INSTRUCTION}
-- **모든 커밋의 내용을 종합**하여 전체 변경사항을 한 줄로 요약
-- 50자 이내로 간결하게
-- 예: "feat: 자동 PR 생성 기능 추가" 또는 "fix: 로그인 버그 수정"
+- **Synthesize all commits** and summarize the entire change in one line
+- Keep it concise within 50 characters
+- Example: "feat: add auto PR generation feature" or "fix: fix login bug"
 
-본문 작성 규칙:
-- 마크다운 형식
+Body Writing Rules:
+- Markdown format
 - {LANGUAGE_INSTRUCTION}
-- **아래 모든 커밋을 빠짐없이 분석**하여 전체적인 변경사항 파악
-- **특히 최신 커밋(위쪽)이 가장 중요함**
-- 다음 섹션 포함:
-  1. ## 📝 요약: **모든 커밋의 변경사항을 종합**하여 2-3문장으로 요약
-  2. ## ✨ 주요 변경사항: **각 커밋별 주요 내용**을 최신순으로 bullet point 나열
+- **Analyze all commits below without omission** to understand the overall changes
+- **The latest commit (at the top) is most important**
+- Include the following sections:
+  1. ## 📝 Summary: **Synthesize all commits' changes** and summarize in 2-3 sentences
+  2. ## ✨ Key Changes: **List main content of each commit** in latest-first order as bullet points
+
+**Please answer in Korean.**
