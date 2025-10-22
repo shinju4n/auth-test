@@ -5,6 +5,7 @@ import {
   addRefreshToken,
   type TokenPayload,
 } from "@/lib/auth";
+import { User } from "@/domains/user/types/user.type";
 
 // 테스트용 임시 사용자 데이터
 const TEST_USER = {
@@ -38,13 +39,18 @@ export const POST = async (req: Request) => {
       // refresh token 메모리에 저장
       addRefreshToken(refreshToken);
 
-      const response = NextResponse.json(
-        {
-          message: "Login successful",
-          user: payload,
-        },
-        { status: 200 }
-      );
+      const response: NextResponse<{ message: string; user: User }> =
+        NextResponse.json(
+          {
+            message: "Login successful",
+            user: {
+              id: TEST_USER.id,
+              email: TEST_USER.email,
+              name: TEST_USER.name,
+            },
+          },
+          { status: 200 }
+        );
 
       // 쿠키에 토큰 저장
       response.cookies.set("accessToken", accessToken, {
