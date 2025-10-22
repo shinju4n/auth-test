@@ -23,6 +23,7 @@ export const useLogin = () => {
       { email, password },
       {
         onSuccess: (data) => {
+          console.log("data", data);
           setUser(data.user);
           router.push("/");
         },

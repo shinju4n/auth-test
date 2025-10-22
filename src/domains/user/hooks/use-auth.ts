@@ -2,18 +2,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/domains/user/store/use-auth-store";
 import { getMe } from "../api/auth.api";
 import { useEffect } from "react";
+import { AUTH_QUERY_KEYS } from "@/lib/query-keys";
 
 export const useAuth = () => {
   const { user, setUser, clearAuth } = useAuthStore();
-
-  const { data, error, isSuccess, isError, isPending } = useQuery({
-    queryKey: ["auth", "user"],
+  const { data, error, isSuccess, isError, isLoading } = useQuery({
+    queryKey: AUTH_QUERY_KEYS.USER,
     queryFn: async () => {
       const response = await getMe();
       return response;
     },
     enabled: !user, // 유저 정보 없을 때만 실행
-    staleTime: 5 * 60 * 1000,
     retry: 1,
   });
 
@@ -30,8 +29,8 @@ export const useAuth = () => {
   }, [isError, clearAuth]);
 
   return {
-    user: user,
-    isLoading: isPending,
+    user,
+    isLoading,
     isAuthenticated: !!user,
     error,
   };
