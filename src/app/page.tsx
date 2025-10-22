@@ -1,11 +1,14 @@
 "use client";
 
 import { useAuth } from "@/domains/user/hooks/use-auth";
+import { useLogout } from "@/domains/user/hooks/use-logout";
 import { User } from "@/domains/user/types/user.type";
 import Link from "next/link";
 
 const Home = () => {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { handleLogout } = useLogout();
+
   return (
     <div className="flex flex-col min-h-screen items-center justify-center w-full bg-gray-50">
       <LoginSection
@@ -14,11 +17,15 @@ const Home = () => {
         user={user}
       />
 
-      {!isAuthenticated && (
+      {!isAuthenticated ? (
         <div>
           <Link href="/login" className="text-blue-500">
             로그인 페이지
           </Link>
+        </div>
+      ) : (
+        <div>
+          <button onClick={handleLogout}>로그아웃</button>
         </div>
       )}
 
