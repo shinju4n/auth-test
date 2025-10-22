@@ -23,14 +23,9 @@ test.describe("로그인 플로우", () => {
     await page.waitForURL("/", { timeout: 5000 });
     expect(page.url()).toBe("http://localhost:3000/");
 
-    // 7. (선택) 홈 페이지에서 링크가 보이는지 확인
-    const loginLink = page.getByRole("link", { name: /로그인 페이지/i });
-    const protectedLink = page.getByRole("link", {
-      name: /인증 보호 페이지/i,
-    });
-
-    await expect(loginLink).toBeVisible();
-    await expect(protectedLink).toBeVisible();
+    // 7. 홈 페이지에서 로그아웃이 보이는지 확인
+    const logoutButton = page.getByRole("button", { name: /로그아웃/i });
+    await expect(logoutButton).toBeVisible();
   });
 
   test("잘못된 비밀번호로 로그인 실패", async ({ page }) => {
