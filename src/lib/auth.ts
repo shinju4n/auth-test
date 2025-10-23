@@ -9,12 +9,16 @@ export interface TokenPayload {
   name: string;
 }
 
-export const generateAccessToken = (payload: TokenPayload) => {
-  return jwt.sign(payload, SECRET_KEY, { expiresIn: "15m" });
+export const generateAccessToken = (payload: TokenPayload | any) => {
+  // payload에서 exp, iat 제거 (새로운 exp로 덮어쓸 것)
+  const { exp, iat, ...cleanPayload } = payload;
+  return jwt.sign(cleanPayload, SECRET_KEY, { expiresIn: "15m" });
 };
 
-export const generateRefreshToken = (payload: TokenPayload) => {
-  return jwt.sign(payload, REFRESH_SECRET_KEY, { expiresIn: "7d" });
+export const generateRefreshToken = (payload: TokenPayload | any) => {
+  // payload에서 exp, iat 제거 (새로운 exp로 덮어쓸 것)
+  const { exp, iat, ...cleanPayload } = payload;
+  return jwt.sign(cleanPayload, REFRESH_SECRET_KEY, { expiresIn: "7d" });
 };
 
 export const verifyAccessToken = (token: string): TokenPayload | null => {
