@@ -81,10 +81,13 @@ async function http(url: string, options: HttpOptions = {}): Promise<Response> {
         // 원래 요청 재시도
         response = await fetch(url, options);
       } else {
-        // Refresh 실패 - 토큰 만료됨
+        // Refresh 실패 - 서버에서 쿠키 삭제
+        await fetch("/api/logout", { method: "POST" });
         processQueue(new Error("Token refresh failed"));
       }
     } catch (error) {
+      // Refresh 에러 발생 - 서버에서 쿠키 삭제
+      await fetch("/api/logout", { method: "POST" });
       processQueue(error);
     } finally {
       isRefreshing = false;
