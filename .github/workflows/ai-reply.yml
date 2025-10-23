@@ -12,8 +12,8 @@ env:
 jobs:
   ai-reply:
     runs-on: ubuntu-latest
-    # @ai로 시작하는 review comment만 처리
-    if: startsWith(github.event.comment.body, '@ai')
+    # /ai로 시작하는 review comment만 처리
+    if: startsWith(github.event.comment.body, '/ai')
 
     steps:
       # 코드 체크아웃
