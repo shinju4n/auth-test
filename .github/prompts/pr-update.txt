@@ -1,14 +1,12 @@
-Analyze the following new commits and summarize the changes.
+다음 새로운 커밋들을 분석해서 변경사항을 요약해줘.
 
-**Format Rules**:
-- Use markdown bullet points
+**형식 규칙**:
+- 마크다운 bullet point 사용
 - {LANGUAGE_INSTRUCTION}
-- Summarize main changes for each commit in 1-2 lines
-- Focus on **what has changed** rather than technical details
+- 각 커밋별로 주요 변경사항을 1-2줄로 요약
+- 기술적 세부사항보다는 **무엇이 바뀌었는지** 중심으로 설명
 
-**Output Format**:
-### 📝 New Changes
-- **Commit hash (7 characters)**: Change summary
-- **Commit hash (7 characters)**: Change summary
-
-**Please answer in Korean.**
+**출력 형식**:
+### 📝 새로운 변경사항
+- **커밋 해시 7자리**: 변경사항 요약
+- **커밋 해시 7자리**: 변경사항 요약
