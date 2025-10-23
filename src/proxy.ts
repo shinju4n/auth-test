@@ -21,7 +21,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const cookieStore = await cookies();
   // 쿠키에서 토큰 확인
-  const token = cookieStore.get("accessToken")?.value;
+  const token = cookieStore.get("refreshToken")?.value;
 
   const isAuthenticated = !!token;
 
