@@ -46,5 +46,10 @@ test.describe("인증 페이지 검증 테스트", () => {
 
     // 4단계: 인증 페이지 접근 확인
     await expect(page).toHaveURL("/protected");
+
+    // 5단계: 인증페이지에서 새로고침
+    await page.reload();
+    await page.waitForURL("/protected", { timeout: 5000 });
+    expect(page.url()).toContain("/protected");
   });
 });
