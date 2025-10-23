@@ -18,8 +18,8 @@ echo "AI 답변 생성 중..."
 echo "파일: $FILE_PATH:$LINE_NUMBER"
 echo "질문: $QUESTION"
 
-# @ai 제거하고 실제 질문만 추출
-CLEAN_QUESTION=$(echo "$QUESTION" | sed 's/^@ai[[:space:]]*//')
+# /ai 제거하고 실제 질문만 추출
+CLEAN_QUESTION=$(echo "$QUESTION" | sed 's/^\/ai[[:space:]]*//')
 
 # 원본 AI 코멘트 내용
 if [ -f "/tmp/parent_comment.txt" ]; then
