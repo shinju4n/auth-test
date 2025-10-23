@@ -1,21 +1,12 @@
+import { httpJson } from "@/lib/http";
 import { AuthResponseDto } from "./auth.dto";
 
 export const getMe = async (): Promise<AuthResponseDto> => {
-  try {
-    const response = await fetch("/api/me");
-    return response.json();
-  } catch (error) {
-    throw error;
-  }
+  return httpJson<AuthResponseDto>("/api/me");
 };
 
 export const logoutApi = async (): Promise<void> => {
-  try {
-    const response = await fetch("/api/logout", {
-      method: "POST",
-    });
-    return response.json();
-  } catch (error) {
-    throw error;
-  }
+  await httpJson<{ message: string }>("/api/logout", {
+    method: "POST",
+  });
 };

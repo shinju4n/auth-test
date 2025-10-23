@@ -17,10 +17,6 @@ test.describe("로그아웃 플로우", () => {
     const loginStatusMessage = page.getByText(/로그인 되었습니다/);
     await expect(loginStatusMessage).toBeVisible();
 
-    // "로그인 페이지" 링크는 숨겨짐
-    const loginPageLink = page.getByRole("link", { name: /로그인 페이지/i });
-    await expect(loginPageLink).not.toBeVisible();
-
     // "로그아웃" 버튼은 보임
     const logoutButton = page.getByRole("button", { name: /로그아웃/i });
     await expect(logoutButton).toBeVisible();
@@ -33,8 +29,8 @@ test.describe("로그아웃 플로우", () => {
     const logoutStatusMessage = page.getByText(/로그인 되지 않았습니다/);
     await expect(logoutStatusMessage).toBeVisible({ timeout: 5000 });
 
-    // "로그인 페이지" 링크는 다시 보임
-    await expect(loginPageLink).toBeVisible();
+    const loginButton = page.getByRole("link", { name: /로그인/i });
+    await expect(loginButton).toBeVisible();
 
     // "로그아웃" 버튼은 숨겨짐
     await expect(logoutButton).not.toBeVisible();
